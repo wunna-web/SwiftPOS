@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftPOS - Single File</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#475569',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Vue.js 3 (Global Build) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <!-- Firebase Compat Libraries (Required for file:// execution without modules) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* Print Styles for Thermal Printers */
+        @media print {
+            @page { margin: 0; size: auto; }
+            body * { visibility: hidden; }
+            #receipt, #receipt * { visibility: visible; }
+            #receipt {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 10px;
+                background: white;
+                color: black;
+            }
+            .no-print { display: none !important; }
+        }
+
+        /* Hide scrollbar for clean UI */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Toast Animation */
+        .toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+        .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+  }
+}
+</script>
+</head>
+<body class="bg-gray-100 text-slate-800 h-screen overflow-hidden">
+
+    <div id="app" class="h-full flex flex-col">
+        
+        <!-- Toast Notifications -->
+        <div class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
+            <transition-group name="toast">
+                <div v-for="toast in toasts" :key="toast.id" 
+                     :class="['px-4 py-3 rounded shadow-lg text-white font-medium flex items-center gap-2 pointer-events-auto', 
+                              toast.type === 'error' ? 'bg-red-500' : 
+                              toast.type === 'success' ? 'bg-green-600' : 'bg-blue-600']">
+                    <i :class="['fas', toast.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle']"></i>
+                    {{ toast.text }}
+                </div>
+            </transition-group>
+        </div>
+
+        <!-- ======================= LOGIN VIEW ======================= -->
+        <div v-if="!user" class="flex-1 flex items-center justify-center bg-gray-50">
+            <div class="bg-white p-10 rounded-2xl shadow-xl w-full max-w-md text-center">
+                <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i class="fas fa-cash-register text-blue-600 text-2xl"></i>
+                </div>
+                <h1 class="text-3xl font-bold mb-2">SwiftPOS</h1>
+                <p class="text-gray-500 mb-8">Sign in to start selling</p>
+                
+                <button @click="login" :disabled="loading"
+                    class="w-full py-3 px-4 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 font-medium flex items-center justify-center gap-3 transition-all">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5">
+                    {{ loading ? 'Signing in...' : 'Sign in with Google' }}
+                </button>
+            </div>
+        </div>
+
+        <!-- ======================= MAIN APP ======================= -->
+        <div v-else class="flex-1 flex h-full overflow-hidden">
+            
+            <!-- Sidebar -->
+            <aside class="w-20 bg-slate-900 text-slate-400 flex flex-col items-center py-6 gap-6 z-20 shrink-0">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white mb-4">
+                    <i class="fas fa-bolt"></i>
+                </div>
+
+                <nav class="flex flex-col gap-4 w-full px-2">
+                    <button @click="currentView = 'POS'" 
+                        :class="['p-3 rounded-xl transition-all flex justify-center', currentView === 'POS' ? 'bg-slate-800 text-blue-400' : 'hover:bg-slate-800 hover:text-white']">
+                        <i class="fas fa-store text-xl"></i>
+                    </button>
+
+                    <!-- Admin Only Links -->
+                    <template v-if="isAdmin">
+                        <button @click="currentView = 'PRODUCTS'" 
+                            :class="['p-3 rounded-xl transition-all flex justify-center', currentView === 'PRODUCTS' ? 'bg-slate-800 text-blue-400' : 'hover:bg-slate-800 hover:text-white']">
+                            <i class="fas fa-boxes text-xl"></i>
+                        </button>
+                        <button @click="currentView = 'SALES'" 
+                            :class="['p-3 rounded-xl transition-all flex justify-center', currentView === 'SALES' ? 'bg-slate-800 text-blue-400' : 'hover:bg-slate-800 hover:text-white']">
+                            <i class="fas fa-receipt text-xl"></i>
+                        </button>
+                        <button @click="currentView = 'USERS'" 
+                            :class="['p-3 rounded-xl transition-all flex justify-center', currentView === 'USERS' ? 'bg-slate-800 text-blue-400' : 'hover:bg-slate-800 hover:text-white']">
+                            <i class="fas fa-users text-xl"></i>
+                        </button>
+                    </template>
+                </nav>
+
+                <div class="mt-auto flex flex-col items-center gap-4">
+                    <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold border-2 border-slate-700 cursor-help" :title="user.email">
+                        {{ user.email[0].toUpperCase() }}
+                    </div>
+                    <button @click="logout" class="p-3 text-red-400 hover:bg-slate-800 rounded-xl transition-colors">
+                        <i class="fas fa-sign-out-alt text-xl"></i>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="flex-1 flex overflow-hidden relative">
+
+                <!-- POS View -->
+                <div v-if="currentView === 'POS'" class="flex-1 flex h-full">
+                    <!-- Product Grid -->
+                    <div class="flex-1 bg-gray-100 flex flex-col min-w-0">
+                        <!-- Search Header -->
+                        <div class="p-4 bg-white border-b border-gray-200 flex items-center gap-4 shadow-sm z-10">
+                            <div class="relative flex-1 max-w-2xl">
+                                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                <input type="text" v-model="searchQuery" ref="searchInput"
+                                    class="w-full pl-10 pr-4 py-3 rounded-xl border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                                    placeholder="Search products or scan barcode (auto-focused)..." autofocus>
+                            </div>
+                        </div>
+
+                        <!-- Products -->
+                        <div class="flex-1 overflow-y-auto p-4">
+                            <div v-if="filteredProducts.length === 0" class="h-full flex flex-col items-center justify-center text-gray-400">
+                                <i class="fas fa-box-open text-5xl mb-4 opacity-30"></i>
+                                <p>No products found</p>
+                            </div>
+                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                <div v-for="product in filteredProducts" :key="product.id" @click="addToCart(product)"
+                                     class="bg-white p-4 rounded-xl shadow-sm border border-transparent hover:border-blue-500 cursor-pointer transition-all flex flex-col h-40 group active:scale-95">
+                                    <h3 class="font-bold text-gray-800 line-clamp-2 leading-tight mb-1">{{ product.name }}</h3>
+                                    <span class="text-xs text-gray-400 font-mono">{{ product.barcode }}</span>
+                                    <div class="mt-auto flex items-end justify-between">
+                                        <span class="text-lg font-bold text-blue-600">${{ product.price.toFixed(2) }}</span>
+                                        <span :class="['text-xs px-2 py-1 rounded-full font-medium', product.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
+                                            {{ product.stock }} left
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cart Sidebar -->
+                    <div class="w-96 bg-white border-l shadow-xl flex flex-col z-20">
+                        <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+                            <h2 class="font-bold text-lg"><i class="fas fa-shopping-cart mr-2"></i> Current Order</h2>
+                            <span class="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-1 rounded">{{ cart.length }} items</span>
+                        </div>
+
+                        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                            <div v-if="cart.length === 0" class="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
+                                <i class="fas fa-shopping-basket text-4xl mb-2"></i>
+                                <p class="text-sm">Cart is empty</p>
+                            </div>
+                            <div v-for="item in cart" :key="item.id" class="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                                <div class="flex-1 min-w-0 pr-3">
+                                    <div class="font-medium truncate">{{ item.name }}</div>
+                                    <div class="text-xs text-gray-500">${{ item.price.toFixed(2) }} x {{ item.quantity }}</div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button @click="updateQty(item, -1)" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600">
+                                        <i class="fas fa-minus text-xs"></i>
+                                    </button>
+                                    <span class="w-6 text-center font-mono font-bold">{{ item.quantity }}</span>
+                                    <button @click="updateQty(item, 1)" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600">
+                                        <i class="fas fa-plus text-xs"></i>
+                                    </button>
+                                    <button @click="removeFromCart(item)" class="ml-2 text-red-400 hover:text-red-600 transition-colors">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-5 bg-gray-50 border-t space-y-4">
+                            <div class="flex justify-between items-center text-xl font-bold">
+                                <span>Total</span>
+                                <span>${{ cartTotal.toFixed(2) }}</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button @click="cart = []" class="px-4 py-3 rounded-lg border border-gray-300 text-gray-600 font-medium hover:bg-white transition-colors">
+                                    Cancel
+                                </button>
+                                <button @click="checkout" :disabled="cart.length === 0" 
+                                        class="px-4 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200">
+                                    Pay Now <i class="fas fa-arrow-right ml-2"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin: Products -->
+                <div v-if="currentView === 'PRODUCTS'" class="flex-1 p-8 overflow-y-auto">
+                    <h2 class="text-2xl font-bold mb-6">Inventory Management</h2>
+                    
+                    <!-- Add Product Form -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border mb-8">
+                        <h3 class="font-bold mb-4 text-gray-700">Add New Item</h3>
+                        <form @submit.prevent="addProduct" class="flex flex-wrap gap-4 items-end">
+                            <div class="flex-1 min-w-[200px]">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Product Name</label>
+                                <input v-model="newProduct.name" required class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <div class="w-32">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Price</label>
+                                <input v-model.number="newProduct.price" type="number" step="0.01" required class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <div class="w-32">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Stock</label>
+                                <input v-model.number="newProduct.stock" type="number" required class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <div class="w-48">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Barcode</label>
+                                <div class="relative">
+                                    <i class="fas fa-barcode absolute left-3 top-2.5 text-gray-400"></i>
+                                    <input v-model="newProduct.barcode" required class="w-full pl-9 p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Scan...">
+                                </div>
+                            </div>
+                            <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-medium h-[42px]">
+                                Add Item
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Product Table -->
+                    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="p-4 text-xs font-bold text-gray-500 uppercase">Product</th>
+                                    <th class="p-4 text-xs font-bold text-gray-500 uppercase">Barcode</th>
+                                    <th class="p-4 text-xs font-bold text-gray-500 uppercase text-right">Price</th>
+                                    <th class="p-4 text-xs font-bold text-gray-500 uppercase text-right">Stock</th>
+                                    <th class="p-4 text-xs font-bold text-gray-500 uppercase text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="p in products" :key="p.id" class="hover:bg-gray-50">
+                                    <td class="p-4 font-medium">{{ p.name }}</td>
+                                    <td class="p-4 font-mono text-sm text-gray-500">{{ p.barcode }}</td>
+                                    <td class="p-4 text-right">${{ p.price.toFixed(2) }}</td>
+                                    <td class="p-4 text-right">
+                                        <span :class="['px-2 py-1 rounded-full text-xs', p.stock < 5 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700']">
+                                            {{ p.stock }}
+                                        </span>
+                                    </td>
+                                    <td class="p-4 text-right">
+                                        <button @click="deleteProduct(p.id)" class="text-red-500 hover:text-red-700 p-2">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Admin: Users -->
+                <div v-if="currentView === 'USERS'" class="flex-1 p-8 overflow-y-auto">
+                    <h2 class="text-2xl font-bold mb-6">User Roles</h2>
+                    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="p-4">Email</th>
+                                    <th class="p-4">Role</th>
+                                    <th class="p-4 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="u in usersList" :key="u.uid">
+                                    <td class="p-4">{{ u.email }}</td>
+                                    <td class="p-4">
+                                        <span :class="['px-2 py-1 rounded text-xs font-bold', u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700']">
+                                            {{ u.role }}
+                                        </span>
+                                    </td>
+                                    <td class="p-4 text-right">
+                                        <button v-if="u.uid !== user.uid" @click="toggleRole(u)" 
+                                                class="text-sm text-blue-600 hover:underline">
+                                            {{ u.role === 'ADMIN' ? 'Demote' : 'Promote' }}
+                                        </button>
+                                        <span v-else class="text-xs text-gray-400 italic">Current User</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Admin: Sales -->
+                <div v-if="currentView === 'SALES'" class="flex-1 p-8 overflow-y-auto">
+                    <h2 class="text-2xl font-bold mb-6">Sales History</h2>
+                    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="p-4">Invoice</th>
+                                    <th class="p-4">Date</th>
+                                    <th class="p-4 text-right">Total</th>
+                                    <th class="p-4 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="s in salesHistory" :key="s.id">
+                                    <td class="p-4 font-mono text-sm">{{ s.invoiceId }}</td>
+                                    <td class="p-4 text-sm">{{ new Date(s.timestamp).toLocaleString() }}</td>
+                                    <td class="p-4 text-right font-bold">${{ s.total.toFixed(2) }}</td>
+                                    <td class="p-4 text-right">
+                                        <button @click="printExistingSale(s)" class="text-blue-600 hover:text-blue-800">
+                                            <i class="fas fa-print"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+
+        <!-- Receipt Template (Hidden until Print) -->
+        <div id="receipt" v-if="lastSale">
+            <div class="text-center mb-4">
+                <h1 class="text-xl font-bold uppercase">SwiftPOS Store</h1>
+                <p class="text-sm">123 Market Street, City</p>
+                <p class="text-sm">Tel: (555) 019-2834</p>
+            </div>
+            <div class="border-b-2 border-dashed border-black mb-2 pb-2 text-sm">
+                <p><strong>Inv:</strong> {{ lastSale.invoiceId }}</p>
+                <p><strong>Date:</strong> {{ new Date(lastSale.timestamp).toLocaleString() }}</p>
+                <p><strong>Cashier:</strong> {{ lastSale.cashierEmail }}</p>
+            </div>
+            <table class="w-full text-sm mb-4">
+                <tr v-for="item in lastSale.items" :key="item.id">
+                    <td class="py-1">{{ item.name }}</td>
+                    <td class="text-right">x{{ item.quantity }}</td>
+                    <td class="text-right">${{ (item.price * item.quantity).toFixed(2) }}</td>
+                </tr>
+            </table>
+            <div class="border-t-2 border-dashed border-black pt-2 mb-8">
+                <div class="flex justify-between font-bold text-lg">
+                    <span>TOTAL</span>
+                    <span>${{ lastSale.total.toFixed(2) }}</span>
+                </div>
+            </div>
+            <div class="text-center text-sm">
+                <p>Thank you for shopping!</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // =========================================================
+        // CONFIGURATION: PASTE YOUR FIREBASE KEYS HERE
+        // =========================================================
+        const firebaseConfig = {
+    apiKey: "AIzaSyBwH-4LerMWtszTDc8NQp3jzHPDjh0sW9Q",
+    authDomain: "swiftpos-465f8.firebaseapp.com",
+    projectId: "swiftpos-465f8",
+    storageBucket: "swiftpos-465f8.firebasestorage.app",
+    messagingSenderId: "1037723897244",
+    appId: "1:1037723897244:web:a70a43c796949940038c59"
+  };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Enable Offline Persistence
+        db.enablePersistence().catch(err => {
+            if (err.code == 'failed-precondition') {
+                console.log('Persistence failed: Multiple tabs open');
+            } else if (err.code == 'unimplemented') {
+                console.log('Persistence not supported');
+            }
+        });
+
+        const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                // State
+                const user = ref(null);
+                const userRole = ref('CASHIER'); // Default
+                const loading = ref(true);
+                const currentView = ref('LOGIN');
+                const products = ref([]);
+                const cart = ref([]);
+                const searchQuery = ref('');
+                const toasts = ref([]);
+                const lastSale = ref(null);
+                const salesHistory = ref([]);
+                const usersList = ref([]);
+                const newProduct = ref({ name: '', price: '', stock: '', barcode: '' });
+                const searchInput = ref(null);
+
+                // Computed
+                const isAdmin = computed(() => userRole.value === 'ADMIN');
+                
+                const filteredProducts = computed(() => {
+                    const q = searchQuery.value.toLowerCase();
+                    return products.value.filter(p => 
+                        p.name.toLowerCase().includes(q) || 
+                        p.barcode.includes(q)
+                    );
+                });
+
+                const cartTotal = computed(() => 
+                    cart.value.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                );
+
+                // Helpers
+                const showToast = (text, type = 'info') => {
+                    const id = Date.now();
+                    toasts.value.push({ id, text, type });
+                    setTimeout(() => {
+                        toasts.value = toasts.value.filter(t => t.id !== id);
+                    }, 3000);
+                };
+
+                // Auth
+                onMounted(() => {
+                    auth.onAuthStateChanged(async (u) => {
+                        loading.value = true;
+                        if (u) {
+                            user.value = u;
+                            // Check/Create User Profile
+                            const userRef = db.collection('users').doc(u.uid);
+                            const docSnap = await userRef.get();
+                            
+                            if (docSnap.exists) {
+                                userRole.value = docSnap.data().role;
+                            } else {
+                                // Check if first user
+                                const allUsers = await db.collection('users').get();
+                                const isFirst = allUsers.empty;
+                                const role = isFirst ? 'ADMIN' : 'CASHIER';
+                                await userRef.set({
+                                    email: u.email,
+                                    role: role,
+                                    uid: u.uid
+                                });
+                                userRole.value = role;
+                            }
+                            
+                            // Load Products Realtime
+                            db.collection('products').onSnapshot(snap => {
+                                products.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                            });
+
+                            currentView.value = 'POS';
+                        } else {
+                            user.value = null;
+                            currentView.value = 'LOGIN';
+                        }
+                        loading.value = false;
+                    });
+
+                    // Global Barcode Listener
+                    let buffer = '';
+                    let lastKeyTime = Date.now();
+                    window.addEventListener('keydown', (e) => {
+                        if (currentView.value !== 'POS') return;
+                        
+                        // Ignore inputs if inside a form field (except search which we want to override sometimes, but better safe)
+                        // If focused on search input, standard typing applies. 
+                        // Barcode scanners act like keyboard input very fast.
+                        
+                        const now = Date.now();
+                        if (now - lastKeyTime > 100) buffer = '';
+                        lastKeyTime = now;
+
+                        if (e.key === 'Enter' && buffer.length > 2) {
+                            // Only treat as barcode if buffer has content and we hit enter
+                            const product = products.value.find(p => p.barcode === buffer);
+                            if (product) {
+                                addToCart(product);
+                                showToast(`Scanned: ${product.name}`, 'success');
+                                buffer = '';
+                                // If focus was in search box, clear it
+                                if (document.activeElement === searchInput.value) {
+                                    searchQuery.value = '';
+                                }
+                            }
+                        } else if (e.key.length === 1) {
+                            buffer += e.key;
+                        }
+                    });
+                });
+
+                const login = async () => {
+                    try {
+                        const provider = new firebase.auth.GoogleAuthProvider();
+                        await auth.signInWithPopup(provider);
+                    } catch (e) {
+                        showToast('Login failed: ' + e.message, 'error');
+                    }
+                };
+
+                const logout = () => auth.signOut();
+
+                // Admin Logic
+                watch(currentView, async (newView) => {
+                    if (newView === 'SALES' && isAdmin.value) {
+                        const snap = await db.collection('sales').orderBy('timestamp', 'desc').limit(50).get();
+                        salesHistory.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    }
+                    if (newView === 'USERS' && isAdmin.value) {
+                        const snap = await db.collection('users').get();
+                        usersList.value = snap.docs.map(d => d.data());
+                    }
+                    if (newView === 'POS') {
+                        nextTick(() => searchInput.value?.focus());
+                    }
+                });
+
+                const addProduct = async () => {
+                    try {
+                        await db.collection('products').add({
+                            ...newProduct.value,
+                            last_updated: Date.now()
+                        });
+                        showToast('Product added', 'success');
+                        newProduct.value = { name: '', price: '', stock: '', barcode: '' };
+                    } catch (e) {
+                        showToast(e.message, 'error');
+                    }
+                };
+
+                const deleteProduct = async (id) => {
+                    if(!confirm('Delete item?')) return;
+                    await db.collection('products').doc(id).delete();
+                };
+
+                const toggleRole = async (targetUser) => {
+                    const newRole = targetUser.role === 'ADMIN' ? 'CASHIER' : 'ADMIN';
+                    await db.collection('users').doc(targetUser.uid).update({ role: newRole });
+                    // Update local list
+                    const idx = usersList.value.findIndex(u => u.uid === targetUser.uid);
+                    if (idx !== -1) usersList.value[idx].role = newRole;
+                    showToast('Role updated', 'success');
+                };
+
+                // POS Logic
+                const addToCart = (product) => {
+                    if (product.stock <= 0) {
+                        showToast('Out of stock', 'error');
+                        return;
+                    }
+                    const existing = cart.value.find(i => i.id === product.id);
+                    if (existing) {
+                        if (existing.quantity >= product.stock) {
+                            showToast('Max stock reached', 'error');
+                            return;
+                        }
+                        existing.quantity++;
+                    } else {
+                        cart.value.push({ ...product, quantity: 1 });
+                    }
+                };
+
+                const removeFromCart = (item) => {
+                    cart.value = cart.value.filter(i => i.id !== item.id);
+                };
+
+                const updateQty = (item, delta) => {
+                    const newQty = item.quantity + delta;
+                    if (newQty > item.stock) {
+                        showToast('Not enough stock', 'error');
+                        return;
+                    }
+                    if (newQty < 1) return;
+                    item.quantity = newQty;
+                };
+
+                const checkout = async () => {
+                    loading.value = true;
+                    try {
+                        const saleData = {
+                            invoiceId: 'INV-' + Date.now().toString().slice(-6),
+                            items: cart.value,
+                            total: cartTotal.value,
+                            cashierEmail: user.value.email,
+                            timestamp: Date.now()
+                        };
+
+                        await db.runTransaction(async (transaction) => {
+                            const productReads = await Promise.all(
+                                cart.value.map(item => transaction.get(db.collection('products').doc(item.id)))
+                            );
+
+                            // Check stock
+                            productReads.forEach((doc, idx) => {
+                                if (!doc.exists) throw "Product removed";
+                                const serverStock = doc.data().stock;
+                                const reqQty = cart.value[idx].quantity;
+                                if (serverStock < reqQty) throw `Insufficient stock for ${doc.data().name}`;
+                                
+                                transaction.update(db.collection('products').doc(doc.id), {
+                                    stock: serverStock - reqQty
+                                });
+                            });
+
+                            const saleRef = db.collection('sales').doc();
+                            transaction.set(saleRef, saleData);
+                        });
+
+                        lastSale.value = saleData;
+                        cart.value = [];
+                        showToast('Sale Completed!', 'success');
+                        
+                        // Auto Print
+                        setTimeout(() => window.print(), 500);
+
+                    } catch (e) {
+                        showToast(e.message || e, 'error');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const printExistingSale = (sale) => {
+                    lastSale.value = sale;
+                    setTimeout(() => window.print(), 100);
+                };
+
+                return {
+                    user, userRole, isAdmin, loading, currentView,
+                    products, filteredProducts, cart, cartTotal,
+                    searchQuery, toasts, searchInput,
+                    login, logout, addToCart, removeFromCart, updateQty, checkout,
+                    newProduct, addProduct, deleteProduct,
+                    usersList, toggleRole,
+                    lastSale, salesHistory, printExistingSale
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
