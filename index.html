@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SwiftPOS</title>
+    <title>SwiftPOS Pro</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,380 +12,376 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#2563eb',
-                        secondary: '#475569',
-                        success: '#22c55e',
-                        danger: '#ef4444',
+                        darkd: '#2563eb',
+                        ddarkark: '#0f172a',
+                        surface: '#ffffff',
+                        background: '#f1f5f9'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
                     }
                 }
             }
         }
     </script>
 
-    <!-- FontAwesome -->
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Vue.js 3 (Global Build) -->
+    <!-- Vue.js 3 & Firebase -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-
-    <!-- Firebase Compat Libraries -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
     <style>
-        /* Touch optimization */
-        body { -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
         
-        /* Print Styles */
-        @media print {
-            @page { margin: 0; size: auto; }
-            body * { visibility: hidden; }
-            #receipt, #receipt * { visibility: visible; }
-            #receipt {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                margin: 0;
-                padding: 0;
-                background: white;
-                color: black;
-            }
-            .no-print { display: none !important; }
-        }
-
         /* Animations */
         .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
         .fade-enter-from, .fade-leave-to { opacity: 0; }
-        
-        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s ease, opacity 0.3s ease; }
-        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(20px); opacity: 0; }
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+        .pop-enter-active { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1); } }
+
+        /* Print Styles */
+        @media print {
+            body * { visibility: hidden; }
+            #receipt, #receipt * { visibility: visible; }
+            #receipt { position: absolute; left: 0; top: 0; width: 100%; margin: 0; }
+            .no-print { display: none !important; }
+        }
+
+        /* Utility */
+        .scrollbar-hide::--webkit-scrollbarwebkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 <script type="importmap">
 {
   "imports": {
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "firebase/": "https://esm.sh/firebase@^12.7.0/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
   }
 }
 </script>
 </head>
-<body class="bg-gray-100 text-slate-800 h-screen w-screen overflow-hidden select-none">
+<body class="bg-slate-100 text-slate-800 h-screen w-screen overflow-hidden select-none">
 
     <div id="app" class="h-full w-full flex flex-col relative">
-        
-        <!-- Toast Notifications -->
-        <div class="fixed top-5 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-11/12 max-w-sm pointer-events-none">
-            <transition-group name="slide-up">
-                <div v-for="toast in toasts" :key="toast.id" 
-                     :class="['px-4 py-3 rounded-lg shadow-xl text-white font-medium flex items-center gap-3 pointer-events-auto backdrop-blur-sm', 
-                              toast.type === 'error' ? 'bg-red-600/90' : 
-                              toast.type === 'success' ? 'bg-green-600/90' : 'bg-slate-800/90']">
-                    <i :class="['fas', toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check']"></i>
-                    {{ toast.text }}
+
+        <!-- GLOBAL TOASTS -->
+        <div class="fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm px-4 pointer-events-none flex flex-col gap-2">
+            <transition-group name="fade">
+                <div v-for="t in toasts" :key="t.id" 
+                     :class="['px-4 py-3 rounded-xl shadow-xl text-white font-semibold flex items-center gap-3 pointer-events-auto backdrop-blur-md', 
+                              t.type === 'error' ? 'bg-red-500/95' : t.type === 'success' ? 'bg-emerald-600/95' : 'bg-slate-800/95']">
+                    <i :class="['fas', t.type === 'error' ? 'fa-circle-exclamation' : 'fa-check-circle']"></i>
+                    {{ t.text }}
                 </div>
             </transition-group>
         </div>
 
-        <!-- ======================= 1. LOGIN VIEW ======================= -->
-        <div v-if="currentView === 'LOGIN'" class="flex-1 flex flex-col items-center justify-center p-6 bg-slate-50">
-            <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-xl text-center">
-                <div class="bg-blue-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
-                    <i class="fas fa-cash-register text-white text-3xl"></i>
+        <!-- ================= 1. DEVICE ACTIVATION (GOOGLE LOGIN) ================= -->
+        <div v-if="viewState === 'DEVICE_LOGIN'" class="flex-1 flex flex-col items-center justify-center p-6 bg-white">
+            <div class="w-24 h-24 bg-blue-600 rounded-3xl flex items-center justify-center shadow-blue-200 shadow-2xl mb-8 rotate-3">
+                <i class="fas fa-store text-white text-4xl -rotate-3"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">SwiftPOS Pro</h1>
+            <p class="text-slate-500 mb-10 text-center max-w-xs">Owner Login<br>Activate this device to start selling.</p>
+            <button @click="deviceLogin" :disabled="loading" class="w-full max-w-sm py-4 bg-white border-2 border-slate-100 hover:border-blue-500 rounded-2xl font-bold text-slate-700 flex items-center justify-center gap-3 transition-all active:scale-95 shadow-sm">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6">
+                {{ loading ? 'Activating...' : 'Activate Device' }}
+            </button>
+        </div>
+
+        <!-- ================= 2. PIN LOCK SCREEN ================= -->
+        <div v-else-if="viewState === 'PIN_LOCK'" class="flex-1 flex flex-col h-full bg-slate-900 text-white">
+            <div class="flex-1 flex flex-col items-center justify-center p-6">
+                <div class="mb-8 text-center">
+                    <h2 class="text-2xl font-bold mb-1">Enter PIN</h2>
+                    <p class="text-slate-400 text-sm">Access for {{ masterEmail }}</p>
                 </div>
-                <h1 class="text-3xl font-bold text-slate-900 mb-2">SwiftPOS</h1>
-                <p class="text-slate-500 mb-8">Mobile Point of Sale</p>
                 
-                <button @click="login" :disabled="loading"
-                    class="w-full py-3.5 px-4 bg-white border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 text-slate-700 rounded-xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95">
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6">
-                    {{ loading ? 'Signing in...' : 'Continue with Google' }}
-                </button>
+                <!-- PIN Dots -->
+                <div class="flex gap-4 mb-10">
+                    <div v-for="i in 4" :key="i" :class="['w-4 h-4 rounded-full transition-all', pinBuffer.length >= i ? 'bg-blue-500 scale-125' : 'bg-slate-700']"></div>
+                </div>
+
+                <!-- Numpad -->
+                <div class="grid grid-cols-3 gap-4 w-full max-w-xs">
+                    <button v-for="n in [1,2,3,4,5,6,7,8,9]" :key="n" @click="handlePinInput(n)" class="h-20 bg-slate-800 rounded-2xl text-2xl font-bold hover:bg-slate-700 active:bg-blue-600 active:text-white transition-colors">{{ n }}</button>
+                    <button @click="viewState = 'DEVICE_LOGIN'; auth.signOut()" class="h-20 text-red-400 font-bold text-sm hover:bg-slate-800 rounded-2xl">LOGOUT</button>
+                    <button @click="handlePinInput(0)" class="h-20 bg-slate-800 rounded-2xl text-2xl font-bold hover:bg-slate-700 active:bg-blue-600 active:text-white transition-colors">0</button>
+                    <button @click="pinBuffer = pinBuffer.slice(0, -1)" class="h-20 text-slate-400 hover:bg-slate-800 rounded-2xl"><i class="fas fa-backspace text-xl"></i></button>
+                </div>
             </div>
         </div>
 
-        <!-- ======================= 2. POS HOME (PRODUCT SELECTION) ======================= -->
-        <div v-else-if="currentView === 'POS_HOME'" class="flex-1 flex flex-col h-full bg-slate-100">
-            <!-- Header -->
-            <header class="bg-white px-4 py-3 shadow-sm z-10 flex items-center justify-between shrink-0">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                        {{ user.email[0].toUpperCase() }}
-                    </div>
-                    <div>
-                        <h1 class="font-bold text-slate-800 leading-tight">SwiftPOS</h1>
-                        <p class="text-xs text-slate-500">{{ isAdmin ? 'Admin' : 'Cashier' }}</p>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <button v-if="isAdmin" @click="currentView = 'ADMIN_PRODUCTS'" class="p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
-                        <i class="fas fa-cog text-lg"></i>
-                    </button>
-                    <button @click="logout" class="p-2 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-lg">
-                        <i class="fas fa-sign-out-alt text-lg"></i>
-                    </button>
-                </div>
-            </header>
-
-            <!-- Search Bar -->
-            <div class="p-4 pb-2 bg-slate-100 sticky top-0 z-10">
-                <div class="relative shadow-sm">
-                    <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                    <input type="text" v-model="searchQuery" ref="searchInput"
-                        class="w-full pl-11 pr-4 py-3.5 rounded-xl border-none bg-white text-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="Search or Scan...">
-                </div>
-            </div>
-
-            <!-- Product Grid -->
-            <div class="flex-1 overflow-y-auto p-4 pb-24">
-                <div v-if="filteredProducts.length === 0" class="flex flex-col items-center justify-center h-64 text-slate-400">
-                    <i class="fas fa-box-open text-4xl mb-2"></i>
-                    <p>No products found</p>
-                </div>
-                
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                    <div v-for="product in filteredProducts" :key="product.id" @click="addToCart(product)"
-                         class="bg-white p-3 rounded-xl shadow-sm border border-transparent active:border-blue-500 active:scale-95 transition-all flex flex-col h-auto min-h-[140px] relative overflow-hidden group">
-                        
-                        <!-- Stock Badge -->
-                        <div class="absolute top-2 right-2">
-                            <span :class="['text-[10px] px-2 py-1 rounded-full font-bold', product.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
-                                {{ product.stock }}
-                            </span>
-                        </div>
-
-                        <div class="flex-1 mt-4">
-                            <h3 class="font-semibold text-slate-800 leading-tight mb-1 line-clamp-2">{{ product.name }}</h3>
-                            <p class="text-xs text-slate-400 font-mono">{{ product.barcode }}</p>
-                        </div>
-                        
-                        <div class="mt-3 flex items-end justify-between">
-                            <span class="text-lg font-bold text-blue-600">${{ product.price.toFixed(2) }}</span>
-                            <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <i class="fas fa-plus"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Floating Cart Bar -->
-            <div v-if="cart.length > 0" class="fixed bottom-0 left-0 w-full p-4 bg-gradient-to-t from-slate-100 via-slate-100 to-transparent z-20">
-                <button @click="currentView = 'POS_CART'" 
-                    class="w-full bg-slate-900 text-white p-4 rounded-2xl shadow-xl shadow-slate-300 flex items-center justify-between active:scale-95 transition-transform">
-                    <div class="flex items-center gap-3">
-                        <div class="bg-blue-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
-                            {{ cartItemCount }}
-                        </div>
-                        <span class="font-medium">View Order</span>
-                    </div>
-                    <span class="font-bold text-xl">${{ cartTotal.toFixed(2) }}</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- ======================= 3. POS CART (REVIEW) ======================= -->
-        <div v-else-if="currentView === 'POS_CART'" class="flex-1 flex flex-col h-full bg-white">
-            <!-- Header -->
-            <header class="px-4 py-4 border-b flex items-center gap-4 bg-white sticky top-0 z-10">
-                <button @click="currentView = 'POS_HOME'" class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors">
-                    <i class="fas fa-arrow-left"></i>
-                </button>
-                <h1 class="text-xl font-bold">Current Order</h1>
-                <div class="ml-auto">
-                     <button @click="cart = []; currentView = 'POS_HOME'" class="text-red-500 text-sm font-medium px-3 py-1 rounded hover:bg-red-50">Clear</button>
-                </div>
-            </header>
-
-            <!-- Cart List -->
-            <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                <div v-for="item in cart" :key="item.id" class="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                    <div class="flex-1">
-                        <h4 class="font-bold text-slate-800">{{ item.name }}</h4>
-                        <p class="text-sm text-slate-500">${{ item.price.toFixed(2) }} / unit</p>
-                    </div>
-                    <div class="flex items-center bg-white rounded-lg shadow-sm border border-slate-200">
-                        <button @click="updateQty(item, -1)" class="w-10 h-10 flex items-center justify-center text-slate-600 active:bg-slate-100 rounded-l-lg">
-                            <i class="fas fa-minus text-sm"></i>
-                        </button>
-                        <span class="w-8 text-center font-bold text-slate-800">{{ item.quantity }}</span>
-                        <button @click="updateQty(item, 1)" class="w-10 h-10 flex items-center justify-center text-slate-600 active:bg-slate-100 rounded-r-lg">
-                            <i class="fas fa-plus text-sm"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Footer -->
-            <div class="p-6 bg-white border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                <div class="flex justify-between items-end mb-6">
-                    <span class="text-slate-500 font-medium">Total Amount</span>
-                    <span class="text-3xl font-bold text-slate-900">${{ cartTotal.toFixed(2) }}</span>
-                </div>
-                
-                <button @click="checkout" :disabled="loading" 
-                    class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-200 flex items-center justify-center gap-2 active:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed">
-                    <span v-if="loading"><i class="fas fa-spinner fa-spin mr-2"></i> Processing...</span>
-                    <span v-else>Confirm Payment <i class="fas fa-check ml-1"></i></span>
-                </button>
-            </div>
-        </div>
-
-        <!-- ======================= 4. POS SUCCESS ======================= -->
-        <div v-else-if="currentView === 'POS_SUCCESS'" class="flex-1 flex flex-col items-center justify-center p-8 bg-white text-center">
-            <div class="w-24 h-24 rounded-full bg-green-100 text-green-500 flex items-center justify-center mb-6 animate-bounce">
-                <i class="fas fa-check text-4xl"></i>
-            </div>
-            <h2 class="text-3xl font-bold text-slate-900 mb-2">Order Successful!</h2>
-            <p class="text-slate-500 mb-8">Invoice #{{ lastSale?.invoiceId }}</p>
+        <!-- ================= 3. MAIN APP LAYOUT (POS / ADMIN) ================= -->
+        <div v-else class="flex h-full overflow-hidden">
             
-            <div class="w-full max-w-sm space-y-3">
-                <button @click="window.print()" class="w-full py-3.5 border-2 border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2">
-                    <i class="fas fa-print"></i> Print Receipt
-                </button>
-                <button @click="startNewSale" class="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold shadow-lg shadow-slate-200 hover:bg-slate-800">
-                    New Sale
-                </button>
-            </div>
-        </div>
-
-        <!-- ======================= 5. ADMIN SECTION ======================= -->
-        <div v-else-if="currentView.startsWith('ADMIN')" class="flex-1 flex flex-col h-full bg-slate-100">
-            <!-- Admin Header -->
-            <header class="bg-slate-900 text-white px-4 py-3 shadow-lg z-10 flex items-center justify-between shrink-0">
-                <div class="flex items-center gap-3">
-                    <button @click="currentView = 'POS_HOME'" class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center hover:bg-slate-600">
-                        <i class="fas fa-times"></i>
-                    </button>
-                    <span class="font-bold">Admin Panel</span>
-                </div>
-                <div class="flex gap-1 bg-slate-800 p-1 rounded-lg">
-                    <button @click="currentView = 'ADMIN_PRODUCTS'" :class="['px-3 py-1 rounded text-sm font-medium', currentView === 'ADMIN_PRODUCTS' ? 'bg-blue-600 text-white' : 'text-slate-400']">Items</button>
-                    <button @click="currentView = 'ADMIN_SALES'" :class="['px-3 py-1 rounded text-sm font-medium', currentView === 'ADMIN_SALES' ? 'bg-blue-600 text-white' : 'text-slate-400']">Sales</button>
-                    <button @click="currentView = 'ADMIN_USERS'" :class="['px-3 py-1 rounded text-sm font-medium', currentView === 'ADMIN_USERS' ? 'bg-blue-600 text-white' : 'text-slate-400']">Users</button>
-                </div>
-            </header>
-
-            <!-- Admin Content -->
-            <div class="flex-1 overflow-y-auto p-4">
-                
-                <!-- Products View -->
-                <div v-if="currentView === 'ADMIN_PRODUCTS'">
-                    <div class="bg-white p-4 rounded-xl shadow-sm mb-4">
-                        <h3 class="font-bold mb-3 text-slate-800">Add New Product</h3>
-                        <form @submit.prevent="addProduct" class="space-y-3">
-                            <input v-model="newProduct.name" required placeholder="Product Name" class="w-full p-3 bg-slate-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                            <div class="flex gap-3">
-                                <input v-model.number="newProduct.price" type="number" step="0.01" required placeholder="Price" class="w-1/2 p-3 bg-slate-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                                <input v-model.number="newProduct.stock" type="number" required placeholder="Stock" class="w-1/2 p-3 bg-slate-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div class="relative">
-                                <i class="fas fa-barcode absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                                <input v-model="newProduct.barcode" required placeholder="Scan Barcode" class="w-full pl-10 p-3 bg-slate-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700">Add Product</button>
-                        </form>
-                    </div>
-
-                    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-                        <div v-for="p in products" :key="p.id" class="p-4 border-b last:border-0 flex justify-between items-center">
-                            <div>
-                                <div class="font-bold text-slate-800">{{ p.name }}</div>
-                                <div class="text-xs text-slate-500">{{ p.barcode }}</div>
-                            </div>
-                            <div class="flex items-center gap-4">
-                                <div class="text-right">
-                                    <div class="font-bold">${{ p.price.toFixed(2) }}</div>
-                                    <div :class="['text-xs font-bold', p.stock < 5 ? 'text-red-500' : 'text-green-600']">{{ p.stock }} in stock</div>
-                                </div>
-                                <button @click="deleteProduct(p.id)" class="w-8 h-8 rounded bg-red-50 text-red-500 flex items-center justify-center">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
+            <!-- Left View: POS -->
+            <div v-if="viewState === 'POS'" class="flex-1 flex flex-col h-full relative bg-slate-100">
+                <!-- Header -->
+                <header class="bg-white px-4 py-3 shadow-sm z-20 flex justify-between items-center shrink-0">
+                    <div class="flex items-center gap-3">
+                        <div :class="['w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold', currentStaff.role === 'ADMIN' ? 'bg-purple-600' : 'bg-blue-600']">
+                            {{ currentStaff.name[0] }}
+                        </div>
+                        <div>
+                            <h1 class="font-bold leading-none">{{ currentStaff.name }}</h1>
+                            <span class="text-xs text-slate-500">{{ currentStaff.role }}</span>
                         </div>
                     </div>
-                </div>
-
-                <!-- Sales View -->
-                <div v-if="currentView === 'ADMIN_SALES'">
-                    <div class="bg-white rounded-xl shadow-sm overflow-hidden divide-y">
-                         <div v-for="s in salesHistory" :key="s.id" class="p-4 flex justify-between items-center">
-                             <div>
-                                 <div class="font-bold text-slate-800">{{ s.invoiceId }}</div>
-                                 <div class="text-xs text-slate-500">{{ new Date(s.timestamp).toLocaleDateString() }}</div>
-                             </div>
-                             <div class="text-right flex items-center gap-3">
-                                 <div class="font-bold text-lg">${{ s.total.toFixed(2) }}</div>
-                                 <button @click="printExistingSale(s)" class="w-8 h-8 bg-blue-50 text-blue-600 rounded flex items-center justify-center">
-                                     <i class="fas fa-print"></i>
-                                 </button>
-                             </div>
-                         </div>
+                    <div class="flex gap-2">
+                        <button v-if="currentStaff.role === 'ADMIN'" @click="viewState = 'ADMIN'" class="px-4 py-2 bg-slate-900 text-white text-sm font-bold rounded-lg hover:bg-slate-700">
+                            Dashboard
+                        </button>
+                        <button @click="lockScreen" class="w-10 h-10 bg-slate-100 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-500">
+                            <i class="fas fa-lock"></i>
+                        </button>
                     </div>
+                </header>
+
+                <!-- Categories -->
+                <div class="px-4 py-2 bg-white border-t border-slate-100 flex gap-2 overflow-x-auto scrollbar-hide shrink-0">
+                    <button @click="selectedCategory = 'All'" 
+                        :class="['px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors', selectedCategory === 'All' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600']">
+                        All Items
+                    </button>
+                    <button v-for="cat in categories" :key="cat" @click="selectedCategory = cat"
+                        :class="['px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors', selectedCategory === cat ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600']">
+                        {{ cat }}
+                    </button>
                 </div>
 
-                <!-- Users View -->
-                <div v-if="currentView === 'ADMIN_USERS'">
-                    <div class="bg-white rounded-xl shadow-sm overflow-hidden divide-y">
-                        <div v-for="u in usersList" :key="u.uid" class="p-4 flex justify-between items-center">
-                            <div>
-                                <div class="font-bold text-slate-800 break-all">{{ u.email }}</div>
-                                <span :class="['px-2 py-0.5 rounded text-[10px] uppercase font-bold', u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700']">
-                                    {{ u.role }}
+                <!-- Product Grid -->
+                <div class="flex-1 overflow-y-auto p-4 pb-32">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        <button v-for="p in filteredProducts" :key="p.id" @click="addToCart(p)"
+                            class="bg-white p-3 rounded-2xl shadow-sm border border-transparent active:border-blue-500 active:scale-95 transition-all flex flex-col h-40 text-left relative overflow-hidden group">
+                            
+                            <div class="absolute top-2 right-2">
+                                <span :class="['text-[10px] px-2 py-1 rounded-full font-bold', p.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700']">
+                                    {{ p.stock }}
                                 </span>
                             </div>
-                            <button v-if="u.uid !== user.uid" @click="toggleRole(u)" class="text-sm font-medium text-blue-600 px-3 py-1 bg-blue-50 rounded">
-                                {{ u.role === 'ADMIN' ? 'Demote' : 'Promote' }}
-                            </button>
-                        </div>
+
+                            <div class="mt-auto">
+                                <h3 class="font-bold text-slate-800 leading-tight mb-1 line-clamp-2">{{ p.name }}</h3>
+                                <div class="flex justify-between items-end">
+                                    <span class="text-blue-600 font-bold">${{ p.price }}</span>
+                                    <span class="text-[10px] text-slate-400">{{ p.category }}</span>
+                                </div>
+                            </div>
+                        </button>
                     </div>
                 </div>
 
+                <!-- Cart Bar (Bottom) -->
+                <div v-if="cart.length > 0" class="fixed bottom-0 left-0 w-full p-4 z-30 pointer-events-none">
+                    <button @click="showCheckout = true" class="pointer-events-auto w-full bg-slate-900 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between active:scale-95 transition-all">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-blue-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">{{ cartCount }}</div>
+                            <span class="font-bold text-lg">Checkout</span>
+                        </div>
+                        <span class="font-bold text-xl">${{ cartTotal }}</span>
+                    </button>
+                </div>
             </div>
+
+            <!-- Full Screen Admin Dashboard -->
+            <div v-if="viewState === 'ADMIN'" class="flex-1 bg-slate-50 flex flex-col h-full overflow-hidden">
+                <header class="bg-slate-900 text-white p-4 flex justify-between items-center shadow-lg shrink-0">
+                    <h1 class="font-bold text-lg">Admin Dashboard</h1>
+                    <button @click="viewState = 'POS'" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 text-sm font-bold">
+                        Back to POS
+                    </button>
+                </header>
+
+                <div class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+                    <!-- 1. Daily Stats -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                            <p class="text-xs text-slate-500 uppercase font-bold">Today's Sales</p>
+                            <p class="text-2xl font-bold text-slate-900">${{ dailyStats.total.toFixed(2) }}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                            <p class="text-xs text-slate-500 uppercase font-bold">Cash</p>
+                            <p class="text-xl font-bold text-green-600">${{ dailyStats.cash.toFixed(2) }}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                            <p class="text-xs text-slate-500 uppercase font-bold">KPay</p>
+                            <p class="text-xl font-bold text-blue-600">${{ dailyStats.kpay.toFixed(2) }}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                            <p class="text-xs text-slate-500 uppercase font-bold">Wave/CB</p>
+                            <p class="text-xl font-bold text-purple-600">${{ dailyStats.other.toFixed(2) }}</p>
+                        </div>
+                    </div>
+
+                    <!-- 2. Staff Management -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="font-bold text-lg">Staff & PINs</h2>
+                            <button @click="toggleAddStaff" class="text-blue-600 text-sm font-bold">+ New Staff</button>
+                        </div>
+                        
+                        <!-- Add Staff Form -->
+                        <div v-if="showAddStaff" class="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                                <input v-model="newStaff.name" placeholder="Name" class="p-2 border rounded-lg text-sm">
+                                <input v-model="newStaff.pin" placeholder="4-Digit PIN" maxlength="4" class="p-2 border rounded-lg text-sm">
+                                <select v-model="newStaff.role" class="p-2 border rounded-lg text-sm">
+                                    <option value="CASHIER">Cashier</option>
+                                    <option value="ADMIN">Admin</option>
+                                </select>
+                                <button @click="addStaff" class="bg-blue-600 text-white rounded-lg font-bold text-sm">Create</button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-slate-50 text-slate-500 uppercase text-xs">
+                                    <tr><th class="p-3">Name</th><th class="p-3">Role</th><th class="p-3">PIN</th><th class="p-3 text-right">Action</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="s in staffList" :key="s.id" class="border-b last:border-0">
+                                        <td class="p-3 font-bold">{{ s.name }}</td>
+                                        <td class="p-3"><span :class="['px-2 py-0.5 rounded text-xs font-bold', s.role==='ADMIN'?'bg-purple-100 text-purple-700':'bg-blue-100 text-blue-700']">{{ s.role }}</span></td>
+                                        <td class="p-3 font-mono text-slate-400">****</td>
+                                        <td class="p-3 text-right">
+                                            <button @click="deleteStaff(s.id)" class="text-red-500 hover:text-red-700 font-bold" :disabled="s.id === currentStaff.id">Delete</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 3. Inventory Management -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                         <div class="flex justify-between items-center mb-4">
+                            <h2 class="font-bold text-lg">Inventory</h2>
+                            <button @click="toggleAddProduct" class="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold">+ New Product</button>
+                        </div>
+
+                        <!-- Add Product Form -->
+                        <div v-if="showAddProduct" class="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                             <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+                                <input v-model="newProduct.name" placeholder="Product Name" class="col-span-2 p-2 border rounded-lg text-sm">
+                                <input v-model.number="newProduct.price" type="number" placeholder="Price" class="p-2 border rounded-lg text-sm">
+                                <input v-model.number="newProduct.stock" type="number" placeholder="Qty" class="p-2 border rounded-lg text-sm">
+                                <input v-model="newProduct.category" list="catList" placeholder="Category" class="p-2 border rounded-lg text-sm">
+                                <datalist id="catList"><option v-for="c in categories" :value="c"></option></datalist>
+                                <input v-model="newProduct.barcode" placeholder="Barcode" class="col-span-full md:col-span-5 p-2 border rounded-lg text-sm">
+                             </div>
+                             <button @click="addProduct" class="w-full bg-green-600 text-white py-2 rounded-lg font-bold">Save Product</button>
+                        </div>
+
+                        <div class="space-y-2">
+                            <div v-for="p in products" :key="p.id" class="flex items-center justify-between p-3 border rounded-xl hover:bg-slate-50">
+                                <div class="flex-1">
+                                    <div class="font-bold text-slate-800">{{ p.name }}</div>
+                                    <div class="text-xs text-slate-500">{{ p.category }} | {{ p.barcode }}</div>
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <div class="text-right">
+                                        <div class="font-bold">${{ p.price }}</div>
+                                        <div :class="['text-xs font-bold', p.stock<5?'text-red-500':'text-green-600']">{{ p.stock }} left</div>
+                                    </div>
+                                    <button @click="quickRestock(p)" class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 flex items-center justify-center font-bold">+</button>
+                                    <button @click="deleteProduct(p.id)" class="text-slate-400 hover:text-red-500"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHECKOUT MODAL -->
+            <transition name="slide-up">
+                <div v-if="showCheckout" class="fixed inset-0 z-50 flex flex-col bg-white">
+                    <div class="p-4 border-b flex items-center justify-between bg-slate-50">
+                        <h2 class="font-bold text-xl">Review Order</h2>
+                        <button @click="showCheckout = false" class="text-slate-500 hover:text-slate-800"><i class="fas fa-times text-xl"></i></button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div v-for="item in cart" :key="item.id" class="flex justify-between items-center p-3 border rounded-xl">
+                            <div>
+                                <div class="font-bold">{{ item.name }}</div>
+                                <div class="text-sm text-slate-500">${{ item.price }} x {{ item.quantity }}</div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <button @click="updateQty(item, -1)" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold">-</button>
+                                <span class="font-bold w-4 text-center">{{ item.quantity }}</span>
+                                <button @click="updateQty(item, 1)" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold">+</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-6 border-t bg-slate-50">
+                        <div class="flex justify-between items-end mb-6">
+                            <span class="text-slate-500">Total Amount</span>
+                            <span class="text-3xl font-bold text-slate-900">${{ cartTotal }}</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <button @click="processPayment('Cash')" class="p-4 bg-green-100 text-green-800 font-bold rounded-xl hover:bg-green-200 border border-green-200">
+                                <i class="fas fa-money-bill-wave mb-1 block text-xl"></i> Cash
+                            </button>
+                            <button @click="processPayment('KPay')" class="p-4 bg-blue-100 text-blue-800 font-bold rounded-xl hover:bg-blue-200 border border-blue-200">
+                                <i class="fas fa-qrcode mb-1 block text-xl"></i> KPay
+                            </button>
+                            <button @click="processPayment('Wave')" class="p-4 bg-yellow-100 text-yellow-800 font-bold rounded-xl hover:bg-yellow-200 border border-yellow-200">
+                                <i class="fas fa-mobile-alt mb-1 block text-xl"></i> Wave
+                            </button>
+                            <button @click="processPayment('CB Pay')" class="p-4 bg-orange-100 text-orange-800 font-bold rounded-xl hover:bg-orange-200 border border-orange-200">
+                                <i class="fas fa-wallet mb-1 block text-xl"></i> CB Pay
+                            </button>
+                        </div>
+                        <button @click="cart=[]" class="w-full py-3 text-red-500 font-bold text-sm">Clear Cart</button>
+                    </div>
+                </div>
+            </transition>
+
         </div>
 
     </div>
 
-    <!-- Hidden Receipt Template -->
+    <!-- Hidden Receipt -->
     <div id="receipt" v-if="lastSale">
-        <div class="text-center mb-4">
-            <h1 class="text-xl font-bold uppercase">SwiftPOS Store</h1>
-            <p class="text-sm">123 Market Street, City</p>
-            <p class="text-sm">Tel: (555) 019-2834</p>
-        </div>
-        <div class="border-b-2 border-dashed border-black mb-2 pb-2 text-sm">
-            <p><strong>Inv:</strong> {{ lastSale.invoiceId }}</p>
-            <p><strong>Date:</strong> {{ new Date(lastSale.timestamp).toLocaleString() }}</p>
-            <p><strong>Cashier:</strong> {{ lastSale.cashierEmail }}</p>
-        </div>
-        <table class="w-full text-sm mb-4">
-            <tr v-for="item in lastSale.items" :key="item.id">
-                <td class="py-1">{{ item.name }}</td>
-                <td class="text-right">x{{ item.quantity }}</td>
-                <td class="text-right">${{ (item.price * item.quantity).toFixed(2) }}</td>
-            </tr>
-        </table>
-        <div class="border-t-2 border-dashed border-black pt-2 mb-8">
-            <div class="flex justify-between font-bold text-lg">
+        <div class="text-center font-mono text-xs">
+            <h1 class="text-lg font-bold mb-2">SWIFTPOS PRO</h1>
+            <p>{{ new Date(lastSale.timestamp).toLocaleString() }}</p>
+            <p>Ref: {{ lastSale.invoiceId }}</p>
+            <p>Cashier: {{ lastSale.cashierName }}</p>
+            <hr class="my-2 border-black border-dashed">
+            <div v-for="i in lastSale.items" class="flex justify-between my-1">
+                <span>{{ i.name }} x{{ i.quantity }}</span>
+                <span>{{ (i.price * i.quantity).toFixed(2) }}</span>
+            </div>
+            <hr class="my-2 border-black border-dashed">
+            <div class="flex justify-between font-bold text-sm">
                 <span>TOTAL</span>
                 <span>${{ lastSale.total.toFixed(2) }}</span>
             </div>
-        </div>
-        <div class="text-center text-sm">
-            <p>Thank you for shopping!</p>
+            <p class="mt-2 text-center">Paid via {{ lastSale.paymentMethod }}</p>
+            <p class="mt-4 text-center">Thank You!</p>
         </div>
     </div>
 
     <script>
-        // -------------------------------------------------------------
-        // PASTE YOUR FIREBASE CONFIGURATION HERE
-        // -------------------------------------------------------------
-        const firebaseConfig = {
+        // ============================================
+        // FIREBASE CONFIGURATION (EDIT ME)
+        // ============================================
+const firebaseConfig = {
     apiKey: "AIzaSyBwH-4LerMWtszTDc8NQp3jzHPDjh0sW9Q",
     authDomain: "swiftpos-465f8.firebaseapp.com",
     projectId: "swiftpos-465f8",
@@ -394,274 +390,264 @@
     appId: "1:1037723897244:web:a70a43c796949940038c59"
   };
 
-        // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
+        db.enablePersistence({ synchronizeTabs: true }).catch(console.warn);
 
-        // Enable Offline Persistence
-        db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-            console.log('Persistence disabled:', err.code);
-        });
+        const { createApp, ref, computed, onMounted, watch } = Vue;
 
-        const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+        // --- Audio Helper (Zero dependency) ---
+        const playSound = (type) => {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                if (type === 'beep') {
+                    osc.frequency.value = 800;
+                    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.1);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.1);
+                } else if (type === 'success') {
+                    osc.frequency.setValueAtTime(500, ctx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(1000, ctx.currentTime + 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.5);
+                }
+            } catch(e) {}
+        };
 
         createApp({
             setup() {
-                // Core State
-                const user = ref(null);
-                const userRole = ref('CASHIER');
+                // States
+                const viewState = ref('DEVICE_LOGIN'); // DEVICE_LOGIN, PIN_LOCK, POS, ADMIN
                 const loading = ref(true);
-                const currentView = ref('LOGIN'); // Values: LOGIN, POS_HOME, POS_CART, POS_SUCCESS, ADMIN_*
+                const masterEmail = ref('');
+                const pinBuffer = ref('');
+                const currentStaff = ref(null);
                 
                 // Data
                 const products = ref([]);
+                const staffList = ref([]);
                 const cart = ref([]);
-                const searchQuery = ref('');
+                const sales = ref([]);
                 const toasts = ref([]);
+                
+                // UI
+                const selectedCategory = ref('All');
+                const showCheckout = ref(false);
+                const showAddStaff = ref(false);
+                const showAddProduct = ref(false);
                 const lastSale = ref(null);
-                const salesHistory = ref([]);
-                const usersList = ref([]);
-                const newProduct = ref({ name: '', price: '', stock: '', barcode: '' });
-                const searchInput = ref(null);
+
+                // Forms
+                const newStaff = ref({ name: '', pin: '', role: 'CASHIER' });
+                const newProduct = ref({ name: '', price: '', stock: '', category: 'General', barcode: '' });
 
                 // Computed
-                const isAdmin = computed(() => userRole.value === 'ADMIN');
-                
+                const categories = computed(() => ['General', ...new Set(products.value.map(p => p.category))]);
                 const filteredProducts = computed(() => {
-                    const q = searchQuery.value.toLowerCase();
-                    return products.value.filter(p => 
-                        p.name.toLowerCase().includes(q) || 
-                        p.barcode.includes(q)
-                    );
+                    if (selectedCategory.value === 'All') return products.value;
+                    return products.value.filter(p => p.category === selectedCategory.value);
+                });
+                const cartTotal = computed(() => cart.value.reduce((sum, i) => sum + (i.price * i.quantity), 0).toFixed(2));
+                const cartCount = computed(() => cart.value.reduce((sum, i) => sum + i.quantity, 0));
+
+                const dailyStats = computed(() => {
+                    const today = new Date().toDateString();
+                    const todaySales = sales.value.filter(s => new Date(s.timestamp).toDateString() === today);
+                    return {
+                        total: todaySales.reduce((s, i) => s + i.total, 0),
+                        cash: todaySales.filter(s => s.paymentMethod === 'Cash').reduce((s, i) => s + i.total, 0),
+                        kpay: todaySales.filter(s => s.paymentMethod === 'KPay').reduce((s, i) => s + i.total, 0),
+                        other: todaySales.filter(s => ['Wave','CB Pay'].includes(s.paymentMethod)).reduce((s, i) => s + i.total, 0)
+                    };
                 });
 
-                const cartTotal = computed(() => 
-                    cart.value.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                );
-
-                const cartItemCount = computed(() => 
-                    cart.value.reduce((sum, item) => sum + item.quantity, 0)
-                );
-
-                // Notifications
-                const showToast = (text, type = 'info') => {
-                    const id = Date.now();
-                    toasts.value.push({ id, text, type });
-                    setTimeout(() => {
-                        toasts.value = toasts.value.filter(t => t.id !== id);
-                    }, 3000);
-                };
-
-                // Authentication & Setup
+                // --- Init & Auth ---
                 onMounted(() => {
                     auth.onAuthStateChanged(async (u) => {
                         loading.value = true;
                         if (u) {
-                            user.value = u;
-                            const userRef = db.collection('users').doc(u.uid);
-                            const docSnap = await userRef.get();
+                            masterEmail.value = u.email;
+                            viewState.value = 'PIN_LOCK';
                             
-                            if (docSnap.exists) {
-                                userRole.value = docSnap.data().role;
-                            } else {
-                                const allUsers = await db.collection('users').get();
-                                const role = allUsers.empty ? 'ADMIN' : 'CASHIER';
-                                await userRef.set({ email: u.email, role, uid: u.uid });
-                                userRole.value = role;
-                            }
+                            // Initialize Real-time Listeners
+                            db.collection('products').onSnapshot(snap => products.value = snap.docs.map(d => ({id: d.id, ...d.data()})));
+                            db.collection('staff').onSnapshot(snap => staffList.value = snap.docs.map(d => ({id: d.id, ...d.data()})));
                             
-                            db.collection('products').onSnapshot(snap => {
-                                products.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                            // Fetch Sales for Admin
+                            db.collection('sales').orderBy('timestamp', 'desc').limit(100).onSnapshot(snap => {
+                                sales.value = snap.docs.map(d => ({id: d.id, ...d.data()}));
                             });
 
-                            if (currentView.value === 'LOGIN') currentView.value = 'POS_HOME';
+                            // Ensure at least one Admin Staff exists for the owner
+                            const staffSnap = await db.collection('staff').get();
+                            if (staffSnap.empty) {
+                                await db.collection('staff').add({
+                                    name: 'Owner',
+                                    pin: '0000',
+                                    role: 'ADMIN',
+                                    isActive: true
+                                });
+                                showToast('Default Admin PIN: 0000', 'success');
+                            }
                         } else {
-                            user.value = null;
-                            currentView.value = 'LOGIN';
+                            viewState.value = 'DEVICE_LOGIN';
                         }
                         loading.value = false;
                     });
-
-                    // Barcode Scanner Listener
-                    let buffer = '';
-                    let lastKeyTime = Date.now();
-                    window.addEventListener('keydown', (e) => {
-                        if (currentView.value !== 'POS_HOME') return;
-
-                        // Calculate typing speed to distinguish scanner
-                        const now = Date.now();
-                        const isFast = (now - lastKeyTime) < 50;
-                        
-                        // If focusing input, let browser handle, unless it's obviously a scanner (very fast)
-                        if (document.activeElement === searchInput.value && !isFast) return;
-
-                        if (now - lastKeyTime > 100) buffer = '';
-                        lastKeyTime = now;
-
-                        if (e.key === 'Enter' && buffer.length > 2) {
-                            const product = products.value.find(p => p.barcode === buffer);
-                            if (product) {
-                                addToCart(product);
-                                buffer = '';
-                                if (document.activeElement === searchInput.value) searchQuery.value = '';
-                            }
-                        } else if (e.key.length === 1) {
-                            buffer += e.key;
-                        }
-                    });
                 });
 
-                // --- Auth Actions ---
-                const login = async () => {
+                const deviceLogin = async () => {
                     try {
-                        const provider = new firebase.auth.GoogleAuthProvider();
-                        await auth.signInWithPopup(provider);
-                    } catch (e) {
-                        showToast('Login Failed', 'error');
+                        await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+                    } catch(e) { showToast(e.message, 'error'); }
+                };
+
+                // --- PIN Logic ---
+                const handlePinInput = (num) => {
+                    if (pinBuffer.value.length < 4) {
+                        pinBuffer.value += num;
+                        if (pinBuffer.value.length === 4) validatePin();
                     }
                 };
 
-                const logout = () => auth.signOut();
+                const validatePin = () => {
+                    const staff = staffList.value.find(s => s.pin === pinBuffer.value);
+                    if (staff) {
+                        currentStaff.value = staff;
+                        viewState.value = 'POS';
+                        playSound('success');
+                        pinBuffer.value = '';
+                    } else {
+                        showToast('Invalid PIN', 'error');
+                        pinBuffer.value = '';
+                    }
+                };
+
+                const lockScreen = () => {
+                    currentStaff.value = null;
+                    viewState.value = 'PIN_LOCK';
+                };
 
                 // --- POS Actions ---
-                const addToCart = (product) => {
-                    if (product.stock <= 0) {
+                const addToCart = (p) => {
+                    if (p.stock <= 0) {
                         showToast('Out of Stock', 'error');
                         return;
                     }
-                    const existing = cart.value.find(i => i.id === product.id);
+                    const existing = cart.value.find(i => i.id === p.id);
                     if (existing) {
-                        if (existing.quantity >= product.stock) {
-                            showToast('Max stock reached', 'error');
+                        if (existing.quantity >= p.stock) {
+                            showToast('Stock Limit Reached', 'error');
                             return;
                         }
                         existing.quantity++;
                     } else {
-                        cart.value.push({ ...product, quantity: 1 });
+                        cart.value.push({ ...p, quantity: 1 });
                     }
-                    showToast('Added to cart', 'success');
+                    playSound('beep');
                 };
 
                 const updateQty = (item, delta) => {
-                    const newQty = item.quantity + delta;
-                    if (newQty > item.stock) {
-                        showToast('Not enough stock', 'error');
-                        return;
-                    }
-                    if (newQty < 1) {
-                        cart.value = cart.value.filter(i => i.id !== item.id);
-                        if (cart.value.length === 0) currentView.value = 'POS_HOME';
-                        return;
-                    }
-                    item.quantity = newQty;
+                    const newQ = item.quantity + delta;
+                    if (newQ > item.stock) return showToast('Max Stock', 'error');
+                    if (newQ < 1) cart.value = cart.value.filter(i => i.id !== item.id);
+                    else item.quantity = newQ;
                 };
 
-                // CRITICAL FIX: Robust Checkout Logic
-                const checkout = async () => {
-                    if (cart.value.length === 0) return;
+                const processPayment = async (method) => {
                     loading.value = true;
-
                     try {
-                        // 1. Prepare Data
                         const saleData = {
                             invoiceId: 'INV-' + Date.now().toString().slice(-6),
-                            items: JSON.parse(JSON.stringify(cart.value)), // Deep copy to prevent mutation issues
-                            total: cartTotal.value,
-                            cashierEmail: user.value.email,
+                            items: JSON.parse(JSON.stringify(cart.value)),
+                            total: parseFloat(cartTotal.value),
+                            paymentMethod: method,
+                            cashierName: currentStaff.value.name,
                             timestamp: Date.now()
                         };
 
-                        // 2. Run Firestore Transaction
-                        await db.runTransaction(async (transaction) => {
-                            // Read Phase
-                            const productRefs = saleData.items.map(item => db.collection('products').doc(item.id));
-                            const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-
-                            // Validation & Logic Phase
-                            productDocs.forEach((doc, idx) => {
-                                if (!doc.exists) throw new Error(`Product removed: ${saleData.items[idx].name}`);
-                                
-                                const serverStock = doc.data().stock;
-                                const reqQty = saleData.items[idx].quantity;
-                                
-                                if (serverStock < reqQty) {
-                                    throw new Error(`Insufficient stock: ${doc.data().name} (Only ${serverStock} left)`);
-                                }
-
-                                // Write Phase (Stage updates)
-                                transaction.update(productRefs[idx], { stock: serverStock - reqQty });
+                        await db.runTransaction(async (t) => {
+                            const reads = await Promise.all(saleData.items.map(i => t.get(db.collection('products').doc(i.id))));
+                            reads.forEach((doc, idx) => {
+                                if (!doc.exists) throw "Item removed";
+                                const stock = doc.data().stock;
+                                const qty = saleData.items[idx].quantity;
+                                if (stock < qty) throw `Insufficient stock: ${doc.data().name}`;
+                                t.update(db.collection('products').doc(doc.id), { stock: stock - qty });
                             });
-
-                            // Create Sale Record
-                            const saleRef = db.collection('sales').doc();
-                            transaction.set(saleRef, saleData);
+                            t.set(db.collection('sales').doc(), saleData);
                         });
 
-                        // 3. Success Handling
+                        playSound('success');
                         lastSale.value = saleData;
+                        setTimeout(() => window.print(), 200);
                         cart.value = [];
-                        currentView.value = 'POS_SUCCESS';
-                        showToast('Payment Successful', 'success');
-
-                    } catch (e) {
-                        console.error(e);
-                        showToast(e.message, 'error');
-                    } finally {
-                        loading.value = false;
+                        showCheckout.value = false;
+                        showToast('Sale Successful!', 'success');
+                    } catch(e) {
+                        showToast(e.message || e, 'error');
                     }
-                };
-
-                const startNewSale = () => {
-                    cart.value = [];
-                    currentView.value = 'POS_HOME';
-                    nextTick(() => searchInput.value?.focus());
+                    loading.value = false;
                 };
 
                 // --- Admin Actions ---
-                watch(currentView, async (newView) => {
-                    if (newView === 'ADMIN_SALES' && isAdmin.value) {
-                        const snap = await db.collection('sales').orderBy('timestamp', 'desc').limit(50).get();
-                        salesHistory.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    }
-                    if (newView === 'ADMIN_USERS' && isAdmin.value) {
-                        const snap = await db.collection('users').get();
-                        usersList.value = snap.docs.map(d => d.data());
-                    }
-                });
+                const addStaff = async () => {
+                    if (!newStaff.value.name || newStaff.value.pin.length !== 4) return showToast('Invalid details', 'error');
+                    await db.collection('staff').add({ ...newStaff.value, isActive: true });
+                    newStaff.value = { name: '', pin: '', role: 'CASHIER' };
+                    showAddStaff.value = false;
+                    showToast('Staff Added', 'success');
+                };
+
+                const deleteStaff = async (id) => {
+                    if (confirm('Remove staff?')) await db.collection('staff').doc(id).delete();
+                };
 
                 const addProduct = async () => {
-                    try {
-                        await db.collection('products').add({ ...newProduct.value, last_updated: Date.now() });
-                        showToast('Product Created', 'success');
-                        newProduct.value = { name: '', price: '', stock: '', barcode: '' };
-                    } catch (e) { showToast(e.message, 'error'); }
+                    await db.collection('products').add(newProduct.value);
+                    newProduct.value = { name: '', price: '', stock: '', category: 'General', barcode: '' };
+                    showAddProduct.value = false;
+                    showToast('Product Saved', 'success');
                 };
 
                 const deleteProduct = async (id) => {
-                    if(!confirm('Delete this product?')) return;
-                    await db.collection('products').doc(id).delete();
+                    if (confirm('Delete item?')) await db.collection('products').doc(id).delete();
                 };
 
-                const toggleRole = async (u) => {
-                    const newRole = u.role === 'ADMIN' ? 'CASHIER' : 'ADMIN';
-                    await db.collection('users').doc(u.uid).update({ role: newRole });
-                    u.role = newRole; // Optimistic update
+                const quickRestock = async (p) => {
+                    const amt = prompt(`Add stock for ${p.name}:`, "10");
+                    if (amt) {
+                        await db.collection('products').doc(p.id).update({ stock: p.stock + parseInt(amt) });
+                        showToast('Stock Updated', 'success');
+                    }
                 };
 
-                const printExistingSale = (sale) => {
-                    lastSale.value = sale;
-                    setTimeout(() => window.print(), 100);
+                // Utils
+                const showToast = (text, type) => {
+                    const id = Date.now();
+                    toasts.value.push({ id, text, type });
+                    setTimeout(() => toasts.value = toasts.value.filter(t => t.id !== id), 3000);
                 };
+                const toggleAddStaff = () => showAddStaff.value = !showAddStaff.value;
+                const toggleAddProduct = () => showAddProduct.value = !showAddProduct.value;
 
                 return {
-                    user, userRole, isAdmin, loading, currentView,
-                    products, filteredProducts, cart, cartTotal, cartItemCount,
-                    searchQuery, toasts, searchInput,
-                    login, logout, addToCart, updateQty, checkout, startNewSale,
-                    newProduct, addProduct, deleteProduct,
-                    usersList, toggleRole,
-                    lastSale, salesHistory, printExistingSale
+                    viewState, loading, masterEmail, pinBuffer, currentStaff,
+                    products, staffList, cart, cartTotal, cartCount, sales, dailyStats, toasts,
+                    selectedCategory, categories, filteredProducts,
+                    showCheckout, showAddStaff, showAddProduct, lastSale,
+                    newStaff, newProduct,
+                    deviceLogin, handlePinInput, lockScreen, auth,
+                    addToCart, updateQty, processPayment,
+                    addStaff, deleteStaff, addProduct, deleteProduct, quickRestock,
+                    toggleAddStaff, toggleAddProduct
                 };
             }
         }).mount('#app');
